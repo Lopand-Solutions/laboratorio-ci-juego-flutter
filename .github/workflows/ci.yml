@@ -1,0 +1,66 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+# El token del workflow solo puede leer el repo.
+permissions:
+  contents: read
+
+# Si subes otro commit a la misma rama, se cancela la corrida anterior.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    name: Formato, análisis y pruebas
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - name: Descarga el código
+        uses: actions/checkout@v7
+
+      - name: Instala Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.47.8' # la misma que `flutter --version` en tu computadora
+          channel: stable
+          cache: true
+
+      - name: Dependencias (exactamente las del pubspec.lock)
+        run: flutter pub get --enforce-lockfile
+
+      - name: El mismo control que en tu computadora
+        run: ./tool/check.sh
+        env:
+          CI: 'true'
+
+  web:
+    name: Build web
+    needs: check
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.47.8'
+          channel: stable
+          cache: true
+
+      - run: flutter pub get --enforce-lockfile
+
+      - name: Construye la versión web
+        run: flutter build web --release
+
+      - name: Guarda el build como artefacto
+        uses: actions/upload-artifact@v7
+        with:
+          name: juego-web
+          path: build/web
+          retention-days: 7
